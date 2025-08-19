@@ -1,0 +1,154 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                          Int      @id @default(autoincrement())
+  fullName                    String?
+  age                         Int      // Only allow 28-32 in your application logic
+  email                       String?   @unique
+  whatsappNumber              String?
+  gender                      GENDER?
+  cityOfResidence             City?
+  cityOther                   String?  // Only if cityOfResidence == OTHER
+  englishProficiency          EnglishProficiency?
+  heightCm                    Int
+  weightKg                    Int
+  isSingleAndAvailable        Boolean?
+  comfortableFilming          Boolean?
+  traditionalWantsMarriage    Boolean?
+  willingToCompete            Boolean?
+  children                    Children?
+  willingLieDetector          Boolean?
+  consentForMedia             Boolean?
+  personalityThreeWords       String?
+  relationshipGoals           String?
+  attractionToOlderMen        String?
+  whyGoodWife                 String?
+  talentsOrHobbies            String?
+  comfortableBikiniChallenges Boolean
+  photo1                      String?   // store file path or URL
+  photo2                      String?
+  photo3                      String?
+  introVideo                  String?   // store file path or URL
+  socialMediaLinks            String?  // comma-separated or JSON string
+  understandsPrivateShow      Boolean
+  understandsNoCompensation   Boolean
+  confirmsTruthful            Boolean
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  // Relationships
+  userPackages                UserPackage[]
+  transactions                Transaction[]
+}
+
+model Package {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  price       Decimal
+  stripePriceId String? // Stripe Price ID
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  userPackages UserPackage[]
+  transactions Transaction[]
+}
+
+model Transaction {
+  id              Int       @id @default(autoincrement())
+  userId          Int
+  packageId       Int
+  stripePaymentIntentId String? // Stripe Payment Intent ID
+  stripeCheckoutSessionId String? // Stripe Checkout Session ID
+  amount          Decimal
+  currency        String    @default("USD")
+  status          TransactionStatus @default(PENDING)
+  paymentMethod   String?
+  metadata        Json? // Additional payment metadata
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relationships
+  user            User      @relation(fields: [userId], references: [id])
+  package         Package   @relation(fields: [packageId], references: [id])
+
+  @@index([userId])
+  @@index([stripePaymentIntentId])
+  @@index([stripeCheckoutSessionId])
+}
+
+model UserPackage {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  packageId Int
+  purchasedAt DateTime @default(now())
+  expiresAt DateTime?
+  isActive  Boolean  @default(true)
+
+  // Relationships
+  user      User     @relation(fields: [userId], references: [id])
+  package   Package  @relation(fields: [packageId], references: [id])
+
+  @@unique([userId, packageId])
+  @@index([userId])
+  @@index([packageId])
+}
+
+enum City {
+  BARRANQUILLA
+  SANTA_MARTA
+  CARTAGENA
+  MEDELLIN
+  BOGOTA
+  NEW_YORK
+  LOS_ANGELES
+  CHICAGO
+  HOUSTON
+  PHOENIX
+  PHILADELPHIA
+  SAN_ANTONIO
+  SAN_DIEGO
+  DALLAS
+  SAN_JOSE
+  OTHER
+}
+
+enum EnglishProficiency {
+  YES
+  SOMEWHAT
+  NO
+}
+
+enum Children {
+  NO
+  YES_1
+  YES_2_PLUS
+}
+
+enum GENDER {
+  MALE
+  FEMALE
+}
+
+enum TransactionStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+  REFUNDED
+}
