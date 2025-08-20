@@ -15,6 +15,7 @@ export class PaymentService {
   async createPaymentSession(
     userId: number,
     packageName: string = 'Bachelor Pilot Show',
+    addOns: number[] = [],
   ): Promise<{ sessionId: string; url: string }> {
     try {
       // Get the package
@@ -25,6 +26,18 @@ export class PaymentService {
         },
       });
 
+      // Get the add-ons
+      const addOnsData = await this.prisma.addOn.findMany({
+        where: {
+          id: { in: addOns },
+        },
+      });
+
+      // Calculate total price including add-ons
+      const totalPrice =
+        Number(packageData.price) +
+        addOnsData.reduce((sum, addOn) => sum + Number(addOn.price), 0);
+
       if (!packageData) {
         throw new BadRequestException('Package not found');
       }
@@ -34,8 +47,18 @@ export class PaymentService {
         data: {
           userId,
           packageId: packageData.id,
-          amount: packageData.price,
+          amount: totalPrice,
           status: 'PENDING',
+          transactionAddOns: {
+            create: [
+              ...addOnsData.map((addOn) => ({
+                addOnId: addOn.id,
+                quantity: 1,
+                totalPrice: addOn.price,
+                unitPrice: addOn.price,
+              })),
+            ],
+          },
         },
       });
 
@@ -44,7 +67,7 @@ export class PaymentService {
         userId,
         packageData.id,
         packageData.name,
-        Number(packageData.price),
+        Number(totalPrice),
         `${process.env.FRONTEND_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
         `${process.env.FRONTEND_URL}/payment/cancel`,
       );
@@ -190,6 +213,17 @@ export class PaymentService {
       },
       include: {
         package: true,
+      },
+    });
+  }
+
+  async getAllPackages() {
+    return this.prisma.package.findMany({
+      where: {
+        isActive: true,
+      },
+      orderBy: {
+        price: 'asc',
       },
     });
   }

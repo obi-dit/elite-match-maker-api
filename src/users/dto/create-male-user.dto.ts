@@ -7,6 +7,7 @@ import {
   IsEmail,
   Min,
   Max,
+  IsArray,
 } from 'class-validator';
 import { City, EnglishProficiency, Children, GENDER } from '@prisma/client';
 
@@ -160,4 +161,13 @@ export class CreateMaleUserDto {
   @IsOptional()
   @IsString()
   paymentMethod?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  selectedAddOns?: number[];
+
+  @IsOptional()
+  @IsString()
+  selectedPackage?: string;
 }

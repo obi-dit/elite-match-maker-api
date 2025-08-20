@@ -51,6 +51,7 @@ model User {
 
   // Relationships
   userPackages                UserPackage[]
+  userAddOns                  UserAddOn[]
   transactions                Transaction[]
 }
 
@@ -72,7 +73,7 @@ model Package {
 model Transaction {
   id              Int       @id @default(autoincrement())
   userId          Int
-  packageId       Int
+  packageId       Int?
   stripePaymentIntentId String? // Stripe Payment Intent ID
   stripeCheckoutSessionId String? // Stripe Checkout Session ID
   amount          Decimal
@@ -85,7 +86,8 @@ model Transaction {
 
   // Relationships
   user            User      @relation(fields: [userId], references: [id])
-  package         Package   @relation(fields: [packageId], references: [id])
+  package         Package?  @relation(fields: [packageId], references: [id])
+  transactionAddOns TransactionAddOn[]
 
   @@index([userId])
   @@index([stripePaymentIntentId])
@@ -107,6 +109,57 @@ model UserPackage {
   @@unique([userId, packageId])
   @@index([userId])
   @@index([packageId])
+}
+
+model AddOn {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  price       Decimal?
+  isCustomPricing Boolean @default(false)
+  customPricingNote String?
+  isActive    Boolean  @default(true)
+  category    AddOnCategory @default(SERVICE)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  userAddOns UserAddOn[]
+  transactionAddOns TransactionAddOn[]
+}
+
+model UserAddOn {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  addOnId   Int
+  quantity  Int      @default(1)
+  customPrice Decimal? // For custom pricing
+  notes     String?  // Additional notes
+  purchasedAt DateTime @default(now())
+  isActive  Boolean  @default(true)
+
+  // Relationships
+  user      User     @relation(fields: [userId], references: [id])
+  addOn     AddOn    @relation(fields: [addOnId], references: [id])
+
+  @@index([userId])
+  @@index([addOnId])
+}
+
+model TransactionAddOn {
+  id            Int       @id @default(autoincrement())
+  transactionId Int
+  addOnId       Int
+  quantity      Int       @default(1)
+  unitPrice    Decimal   // Price at time of purchase
+  totalPrice   Decimal   // quantity * unitPrice
+  
+  // Relationships
+  transaction  Transaction @relation(fields: [transactionId], references: [id])
+  addOn        AddOn      @relation(fields: [addOnId], references: [id])
+  
+  @@index([transactionId])
+  @@index([addOnId])
 }
 
 enum City {
@@ -151,4 +204,12 @@ enum TransactionStatus {
   FAILED
   CANCELLED
   REFUNDED
+}
+
+enum AddOnCategory {
+  SERVICE
+  VERIFICATION
+  MEDIA
+  CONCIERGE
+  OTHER
 }

@@ -7,6 +7,7 @@ import { UserModule } from './users/user.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UploadModule } from './upload/upload.module';
 import { PaymentModule } from './payment/payment.module';
+import { AddOnModule } from './addons/addon.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { PaymentModule } from './payment/payment.module';
     UserModule,
     UploadModule,
     PaymentModule,
+    AddOnModule,
   ],
   controllers: [AppController],
   providers: [AppService],

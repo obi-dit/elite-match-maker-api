@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PaymentService } from '../payment/payment.service';
+import { AddOnService } from '../addons/addon.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { CreateMaleUserDto } from './dto/create-male-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
@@ -15,6 +16,7 @@ export class UserService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly paymentService: PaymentService,
+    private readonly addOnService: AddOnService,
   ) {}
 
   async createUser(createUserDto: CreateUserDto): Promise<UserResponseDto> {
@@ -181,16 +183,41 @@ export class UserService {
         data: userData,
       });
 
-      // Create payment session for male users
+      // Handle add-on purchases if selected
+      if (
+        createMaleUserDto.selectedAddOns &&
+        createMaleUserDto.selectedAddOns.length > 0
+      ) {
+        try {
+          await Promise.all(
+            createMaleUserDto.selectedAddOns.map((addOnId) =>
+              this.addOnService.purchaseAddOn({
+                userId: user.id,
+                addOnId,
+                quantity: 1,
+                notes: 'Purchased with male user application',
+              }),
+            ),
+          );
+        } catch (addOnError) {
+          console.error('Error creating add-on purchases:', addOnError);
+          // Don't fail user creation if add-on creation fails
+        }
+      }
+
+      // Create payment session for male users (only if package is selected)
       let paymentSession = null;
-      try {
-        paymentSession = await this.paymentService.createPaymentSession(
-          user.id,
-          'Bachelor Pilot Show',
-        );
-      } catch (error) {
-        console.error('Error creating payment session:', error);
-        // Don't fail user creation if payment session creation fails
+      if (createMaleUserDto.selectedPackage) {
+        try {
+          paymentSession = await this.paymentService.createPaymentSession(
+            user.id,
+            createMaleUserDto.selectedPackage,
+            createMaleUserDto.selectedAddOns,
+          );
+        } catch (error) {
+          console.error('Error creating payment session:', error);
+          // Don't fail user creation if payment session creation fails
+        }
       }
 
       const userResponse = user as UserResponseDto;
@@ -199,6 +226,11 @@ export class UserService {
       if (paymentSession) {
         (userResponse as any).paymentSession = paymentSession;
       }
+
+      // Add add-on and package information to response
+      (userResponse as any).selectedAddOns =
+        createMaleUserDto.selectedAddOns || [];
+      (userResponse as any).selectedPackage = createMaleUserDto.selectedPackage;
 
       return userResponse;
     } catch (error) {

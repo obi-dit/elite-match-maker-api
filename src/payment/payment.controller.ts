@@ -94,4 +94,18 @@ export class PaymentController {
       throw new BadRequestException(error.message);
     }
   }
+
+  @Get('packages')
+  async getAllPackages() {
+    try {
+      const packages = await this.paymentService.getAllPackages();
+
+      return {
+        success: true,
+        packages,
+      };
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
+  }
 }
