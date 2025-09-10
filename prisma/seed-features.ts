@@ -209,6 +209,9 @@ export async function seedFeatures() {
   ];
 
   console.log('🔗 Creating subscriptions and tier-feature relationships...');
+  let createdRelationships = 0;
+  let skippedRelationships = 0;
+
   for (const tierData of tierFeatures) {
     // First create the subscription tier (check if it already exists)
     let subscription = await prisma.subscription.findUnique({
@@ -231,37 +234,32 @@ export async function seedFeatures() {
     for (const featureName of tierData.features) {
       const feature = allFeatures.find((f) => f.name === featureName);
       if (feature) {
-        // Check if relationship already exists to avoid duplicates
-        const existingRelationship =
-          await prisma.subscriptionFeature.findUnique({
-            where: {
-              subscriptionId_featureId: {
-                subscriptionId: subscription.id,
-                featureId: feature.id,
-              },
-            },
-          });
-        console.log('Existing relationship:', existingRelationship);
-        console.log('Subscription ID:', subscription.id);
-        console.log('Feature ID:', feature.id);
-        console.log('Feature Name:', feature.name);
-
-        if (!existingRelationship) {
-          console.log('Creating subscription feature relationship...');
-          console.log(
-            'Subscription ID:',
-            subscription,
-            'Feature ID:',
-            feature,
-            'Feature Name:',
-            feature.name,
-          );
+        // Use upsert to handle duplicates gracefully
+        try {
           await prisma.subscriptionFeature.create({
             data: {
               subscriptionId: subscription.id,
               featureId: feature.id,
             },
           });
+          createdRelationships++;
+          console.log(
+            `Created subscription-feature relationship: ${tierData.tier} -> ${feature.name}`,
+          );
+        } catch (error) {
+          // If it's a unique constraint error, the relationship already exists
+          if (error.code === 'P2002') {
+            skippedRelationships++;
+            console.log(
+              `Skipping existing relationship: ${tierData.tier} -> ${feature.name}`,
+            );
+          } else {
+            console.error(
+              `Error creating relationship ${tierData.tier} -> ${feature.name}:`,
+              error,
+            );
+            throw error;
+          }
         }
       }
     }
@@ -282,6 +280,8 @@ export async function seedFeatures() {
   console.log(
     `   - Subscription-feature relationships: ${subscriptionFeatureCount}`,
   );
+  console.log(`   - New relationships created: ${createdRelationships}`);
+  console.log(`   - Existing relationships skipped: ${skippedRelationships}`);
 
   // Display features by category
   const featuresByCategory = await prisma.feature.groupBy({
