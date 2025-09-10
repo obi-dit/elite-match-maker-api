@@ -12,6 +12,7 @@ import {
 import { UserService } from './user.service';
 import { CreateUserDto, UserResponseDto } from './dto';
 import { CreateMaleUserDto } from './dto/create-male-user.dto';
+import { CreateMembershipUserDto } from './dto/create-membership-user.dto';
 
 @Controller('users')
 export class UserController {
@@ -31,6 +32,14 @@ export class UserController {
     @Body() createMaleUserDto: CreateMaleUserDto,
   ): Promise<UserResponseDto> {
     return this.userService.createMaleUser(createMaleUserDto);
+  }
+
+  @Post('membership')
+  @HttpCode(HttpStatus.CREATED)
+  async createMembershipUser(
+    @Body() createMembershipUserDto: CreateMembershipUserDto,
+  ): Promise<UserResponseDto> {
+    return this.userService.createMembershipUser(createMembershipUserDto);
   }
 
   @Put(':id/photos')

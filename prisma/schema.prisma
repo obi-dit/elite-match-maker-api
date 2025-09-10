@@ -16,15 +16,18 @@ datasource db {
 model User {
   id                          Int      @id @default(autoincrement())
   fullName                    String?
-  age                         Int      // Only allow 28-32 in your application logic
+  firstName                   String?   // For membership users
+  lastName                    String?   // For membership users
+  age                         Int?      // Made optional for membership users
   email                       String?   @unique
+  password                    String?
   whatsappNumber              String?
   gender                      GENDER?
   cityOfResidence             City?
   cityOther                   String?  // Only if cityOfResidence == OTHER
   englishProficiency          EnglishProficiency?
-  heightCm                    Int
-  weightKg                    Int
+  heightCm                    Int?      // Made optional for membership users
+  weightKg                    Int?      // Made optional for membership users
   isSingleAndAvailable        Boolean?
   comfortableFilming          Boolean?
   traditionalWantsMarriage    Boolean?
@@ -37,22 +40,26 @@ model User {
   attractionToOlderMen        String?
   whyGoodWife                 String?
   talentsOrHobbies            String?
-  comfortableBikiniChallenges Boolean
+  comfortableBikiniChallenges Boolean?  @default(false)
   photo1                      String?   // store file path or URL
   photo2                      String?
   photo3                      String?
   introVideo                  String?   // store file path or URL
   socialMediaLinks            String?  // comma-separated or JSON string
-  understandsPrivateShow      Boolean
-  understandsNoCompensation   Boolean
-  confirmsTruthful            Boolean
+  isMembershipSubscribed      Boolean  @default(false)
+  understandsPrivateShow      Boolean? @default(true)
+  understandsNoCompensation   Boolean? @default(true)
+  confirmsTruthful            Boolean? @default(true)
+  selectedTier                String?   // For membership users
+  role                        UserRole @default(USER)
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt
 
   // Relationships
   userPackages                UserPackage[]
-  userAddOns                  UserAddOn[]
   transactions                Transaction[]
+  userSubscription            UserSubscription[]
+  podcastAccess               PodcastAccess[]
 }
 
 model Package {
@@ -74,6 +81,7 @@ model Transaction {
   id              Int       @id @default(autoincrement())
   userId          Int
   packageId       Int?
+  subscriptionId  Int?
   stripePaymentIntentId String? // Stripe Payment Intent ID
   stripeCheckoutSessionId String? // Stripe Checkout Session ID
   amount          Decimal
@@ -87,6 +95,7 @@ model Transaction {
   // Relationships
   user            User      @relation(fields: [userId], references: [id])
   package         Package?  @relation(fields: [packageId], references: [id])
+  subscription    Subscription? @relation(fields: [subscriptionId], references: [id])
   transactionAddOns TransactionAddOn[]
 
   @@index([userId])
@@ -101,7 +110,8 @@ model UserPackage {
   purchasedAt DateTime @default(now())
   expiresAt DateTime?
   isActive  Boolean  @default(true)
-
+ 
+  userPackageAddOn UserPackageAddOn[]
   // Relationships
   user      User     @relation(fields: [userId], references: [id])
   package   Package  @relation(fields: [packageId], references: [id])
@@ -124,13 +134,13 @@ model AddOn {
   updatedAt   DateTime @updatedAt
 
   // Relationships
-  userAddOns UserAddOn[]
+  userPackageAddOn UserPackageAddOn[]
   transactionAddOns TransactionAddOn[]
 }
 
-model UserAddOn {
+model UserPackageAddOn {
   id        Int      @id @default(autoincrement())
-  userId    Int
+  userPackageId    Int
   addOnId   Int
   quantity  Int      @default(1)
   customPrice Decimal? // For custom pricing
@@ -139,10 +149,10 @@ model UserAddOn {
   isActive  Boolean  @default(true)
 
   // Relationships
-  user      User     @relation(fields: [userId], references: [id])
+  userPackage      UserPackage     @relation(fields: [userPackageId], references: [id])
   addOn     AddOn    @relation(fields: [addOnId], references: [id])
 
-  @@index([userId])
+  @@index([userPackageId])
   @@index([addOnId])
 }
 
@@ -160,6 +170,76 @@ model TransactionAddOn {
   
   @@index([transactionId])
   @@index([addOnId])
+}
+
+model Subscription {
+  id                  Int       @id @default(autoincrement())
+  tier                TierEnum    @unique // bronze, silver, gold, elite-vip
+  price               Decimal
+  period              SupscriptionPeriod  @default(MONTHLY)
+  isActive            Boolean   @default(false)
+  currency            String    @default("USD")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  // Relationships
+  transaction         Transaction[]
+  subscriptionFeatures SubscriptionFeature[]
+  userSubscription     UserSubscription[]
+}
+
+
+model UserSubscription {
+  id                  Int       @id @default(autoincrement())
+  userId              Int  
+  subscriptionId      Int
+  stripeCustomerId    String    // Stripe Customer ID
+  stripeSubscriptionId String?  // Stripe Subscription ID
+  status              SubscriptionStatus @default(ACTIVE)
+  currentPeriodStart  DateTime
+  currentPeriodEnd    DateTime
+  price               Decimal
+  currency            String    @default("USD")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  // Relationships
+  user                User            @relation(fields: [userId], references: [id])
+  subscription        Subscription    @relation(fields: [subscriptionId], references: [id])
+
+  @@index([userId])
+  
+  @@index([subscriptionId])
+}
+model Feature {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  category    FeatureCategory @default(CONTENT)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  subscriptionFeatures SubscriptionFeature[]
+
+  @@index([category])
+}
+
+
+model SubscriptionFeature {
+  id             Int       @id @default(autoincrement())
+  subscriptionId Int
+  featureId      Int
+  createdAt      DateTime  @default(now())
+  // Relationships
+  subscription  Subscription @relation(fields: [subscriptionId], references: [id])
+  feature       Feature      @relation(fields: [featureId], references: [id])
+
+  @@unique([subscriptionId, featureId])
+  @@index([subscriptionId])
+  @@index([featureId])
+
+
 }
 
 enum City {
@@ -212,4 +292,114 @@ enum AddOnCategory {
   MEDIA
   CONCIERGE
   OTHER
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  PAST_DUE
+  UNPAID
+  TRIAL
+}
+
+enum FeatureCategory {
+  CONTENT
+  COMMUNITY
+  INTERACTION
+  MATCHMAKING
+  CONCIERGE
+  VERIFICATION
+  MEDIA
+  OTHER
+}
+
+
+enum TierEnum {
+  BRONZE 
+  SILVER 
+  GOLD 
+  ELITEVIP
+}
+
+
+enum SupscriptionPeriod{
+  MONTHLY
+  WEEKLY
+  DAILY
+  YEARLY
+}
+
+model Podcast {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?
+  audioUrl    String?  // URL to audio file
+  videoUrl    String?  // URL to video file (for live streams)
+  thumbnailUrl String? // URL to thumbnail image
+  duration    Int?     // Duration in seconds
+  status      PodcastStatus @default(DRAFT)
+  type        PodcastType @default(RECORDED)
+  scheduledAt DateTime? // For live podcasts
+  streamKey   String?   // For live streaming
+  isLive      Boolean   @default(false)
+  viewCount   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relationships
+  podcastAccess PodcastAccess[]
+  podcastCategories PodcastCategory[]
+
+  @@index([status])
+  @@index([type])
+  @@index([isLive])
+  @@index([scheduledAt])
+}
+
+model PodcastCategory {
+  id        Int      @id @default(autoincrement())
+  podcastId Int
+  category  String   // e.g., "Dating Tips", "Success Stories", "Live Q&A"
+  createdAt DateTime @default(now())
+
+  // Relationships
+  podcast   Podcast  @relation(fields: [podcastId], references: [id], onDelete: Cascade)
+
+  @@unique([podcastId, category])
+  @@index([podcastId])
+  @@index([category])
+}
+
+model PodcastAccess {
+  id        Int      @id @default(autoincrement())
+  podcastId Int
+  userId    Int
+  accessedAt DateTime @default(now())
+
+  // Relationships
+  podcast   Podcast  @relation(fields: [podcastId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([podcastId, userId])
+  @@index([podcastId])
+  @@index([userId])
+}
+
+enum PodcastStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+  LIVE
+  ENDED
+}
+
+enum PodcastType {
+  RECORDED
+  LIVE
+  PREMIUM
+}
+
+enum UserRole {
+  USER
+  ADMIN
 }

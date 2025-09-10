@@ -40,31 +40,82 @@ export class PaymentBackgroundService {
 
           // Update transaction status based on session status
           if (session.payment_status === 'paid') {
-            await this.prisma.transaction.update({
-              where: { id: transaction.id },
-              data: {
-                status: 'PAID',
-                stripePaymentIntentId: session.payment_intent as string,
-                paymentMethod: session.payment_method_types?.[0] || 'card',
-                metadata: {
-                  customerEmail: session.customer_details?.email,
-                  customerName: session.customer_details?.name,
+            if (transaction.packageId) {
+              await this.prisma.transaction.update({
+                where: { id: transaction.id },
+                data: {
+                  status: 'PAID',
+                  stripePaymentIntentId: session.payment_intent as string,
+                  paymentMethod: session.payment_method_types?.[0] || 'card',
+                  metadata: {
+                    customerEmail: session.customer_details?.email,
+                    customerName: session.customer_details?.name,
+                  },
                 },
-              },
-            });
+              });
 
-            // Create user package relationship
-            await this.prisma.userPackage.create({
-              data: {
-                userId: transaction.userId,
-                packageId: transaction.packageId,
-                isActive: true,
-              },
-            });
+              // Create user package relationship
+              await this.prisma.userPackage.create({
+                data: {
+                  userId: transaction.userId,
+                  packageId: transaction.packageId,
+                  isActive: true,
+                },
+              });
 
-            this.logger.log(
-              `Transaction ${transaction.id} marked as PAID for user ${transaction.userId}`,
-            );
+              this.logger.log(
+                `Transaction ${transaction.id} marked as PAID for user ${transaction.userId}`,
+              );
+            }
+
+            if (transaction.subscriptionId) {
+              await this.prisma.transaction.update({
+                where: { id: transaction.id },
+                data: {
+                  status: 'PAID',
+                  stripePaymentIntentId: session.payment_intent as string,
+                  paymentMethod: session.payment_method_types?.[0] || 'card',
+                  metadata: {
+                    customerEmail: session.customer_details?.email,
+                    customerName: session.customer_details?.name,
+                  },
+                },
+              });
+              await this.prisma.userSubscription.create({
+                data: {
+                  user: {
+                    connect: {
+                      id: Number(transaction.userId),
+                    },
+                  },
+
+                  subscription: {
+                    connect: {
+                      id: Number(transaction.subscriptionId),
+                    },
+                  },
+                  currentPeriodStart: new Date(),
+                  currentPeriodEnd: new Date(
+                    new Date().getTime() + 30 * 24 * 60 * 60 * 1000,
+                  ),
+
+                  price: transaction.amount,
+                  status: 'ACTIVE',
+                  stripeCustomerId: 'stripe' as string,
+                },
+              });
+
+              this.prisma.user.update({
+                where: { id: transaction.userId },
+                data: {
+                  isMembershipSubscribed: true,
+                },
+              });
+
+              this.logger.log(
+                `Transaction ${transaction.id} marked as PAID for user ${transaction.userId} and user is now subscribed`,
+              );
+            }
           } else if (
             session.payment_status === 'unpaid' &&
             session.status === 'expired'

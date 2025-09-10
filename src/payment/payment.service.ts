@@ -12,6 +12,60 @@ export class PaymentService {
     private readonly stripeService: StripeService,
   ) {}
 
+  async createMembershipPaymentSession(
+    userId: number,
+    subscriptionTierId: number,
+  ): Promise<{ sessionId: string; url: string }> {
+    try {
+      // Get the subscription tier
+      const subscriptionTier = await this.prisma.subscription.findFirst({
+        where: {
+          id: subscriptionTierId,
+          isActive: true,
+        },
+      });
+
+      if (!subscriptionTier) {
+        throw new BadRequestException('Subscription tier not found');
+      }
+
+      const totalPrice = subscriptionTier.price;
+      // Create transaction record
+      const transaction = await this.prisma.transaction.create({
+        data: {
+          userId,
+          subscriptionId: subscriptionTier.id,
+          amount: totalPrice,
+          status: 'PENDING',
+        },
+      });
+      const session = await this.stripeService.createCheckoutSession(
+        userId,
+        subscriptionTier.id,
+        subscriptionTier.tier,
+        Number(totalPrice),
+        `${process.env.FRONTEND_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+        `${process.env.FRONTEND_URL}/payment/cancel`,
+      );
+
+      // Update transaction with session ID
+      await this.prisma.transaction.update({
+        where: { id: transaction.id },
+        data: {
+          stripeCheckoutSessionId: session.sessionId,
+        },
+      });
+
+      return {
+        sessionId: session.sessionId,
+        url: session.url,
+      };
+    } catch (error) {
+      this.logger.error('Error creating membership payment session:', error);
+      throw error;
+    }
+  }
+
   async createPaymentSession(
     userId: number,
     packageName: string = 'Bachelor Pilot Show',
@@ -68,7 +122,7 @@ export class PaymentService {
         packageData.id,
         packageData.name,
         Number(totalPrice),
-        `${process.env.FRONTEND_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+        `${process.env.FRONTEND_URL}/onboarding/stripe-success?session_id={CHECKOUT_SESSION_ID}`,
         `${process.env.FRONTEND_URL}/payment/cancel`,
       );
 

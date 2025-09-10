@@ -1,9 +1,13 @@
 import { PrismaClient } from '@prisma/client';
+import { seedFeatures } from './seed-features';
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('Seeding database...');
+
+  // Seed features and tier relationships
+  await seedFeatures();
 
   // Create Starter Package
   const starterPackage = await prisma.package.upsert({

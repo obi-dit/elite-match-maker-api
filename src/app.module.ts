@@ -8,6 +8,11 @@ import { PrismaModule } from './prisma/prisma.module';
 import { UploadModule } from './upload/upload.module';
 import { PaymentModule } from './payment/payment.module';
 import { AddOnModule } from './addons/addon.module';
+import { MembershipModule } from './membership/membership.module';
+import { SubscriptionModule } from './subscription/subscription.module';
+import { AuthModule } from './auth/auth.module';
+import { PodcastModule } from './podcast/podcast.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -18,6 +23,11 @@ import { AddOnModule } from './addons/addon.module';
     UploadModule,
     PaymentModule,
     AddOnModule,
+    MembershipModule,
+    SubscriptionModule,
+    AuthModule,
+    PodcastModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -8,8 +8,10 @@ import { PaymentService } from '../payment/payment.service';
 import { AddOnService } from '../addons/addon.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { CreateMaleUserDto } from './dto/create-male-user.dto';
+import { CreateMembershipUserDto } from './dto/create-membership-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { City } from '@prisma/client';
+import * as argon2 from 'argon2';
 
 @Injectable()
 export class UserService {
@@ -290,5 +292,59 @@ export class UserService {
       throw new BadRequestException('User not found');
     }
     return user as UserResponseDto;
+  }
+
+  async createMembershipUser(
+    createMembershipUserDto: CreateMembershipUserDto,
+  ): Promise<UserResponseDto> {
+    try {
+      // Validate email uniqueness
+      const existingUser = await this.prisma.user.findUnique({
+        where: { email: createMembershipUserDto.email },
+      });
+      if (existingUser) {
+        throw new ConflictException('Email already exists');
+      }
+
+      // Hash password before storing
+      const hashedPassword = await argon2.hash(
+        createMembershipUserDto.password,
+      );
+
+      // Create user with membership information
+      const user = await this.prisma.user.create({
+        data: {
+          firstName: createMembershipUserDto.firstName,
+          lastName: createMembershipUserDto.lastName,
+          email: createMembershipUserDto.email,
+          password: hashedPassword,
+          gender: 'MALE', // Default for membership users
+          selectedTier: createMembershipUserDto.selectedTier,
+          comfortableBikiniChallenges: true,
+          understandsPrivateShow: true,
+          understandsNoCompensation: true,
+          confirmsTruthful: true,
+        },
+      });
+
+      // Create payment session for membership users
+      let paymentSession = null;
+
+      paymentSession = await this.paymentService.createMembershipPaymentSession(
+        user.id,
+        Number(createMembershipUserDto.selectedTier),
+      );
+
+      return { ...paymentSession };
+    } catch (error) {
+      if (
+        error instanceof ConflictException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+      console.error('Error creating membership user:', error);
+      throw new BadRequestException('Failed to create membership user');
+    }
   }
 }

@@ -63,41 +63,41 @@ export class AddOnService {
     }
 
     // Create the user-add-on relationship
-    const userAddOn = await this.prisma.userAddOn.create({
-      data: {
-        userId,
-        addOnId,
-        quantity,
-        notes,
-        isActive: true,
-      },
-      include: {
-        addOn: true,
-        user: {
-          select: {
-            id: true,
-            fullName: true,
-            email: true,
-          },
-        },
-      },
-    });
+    // const userAddOn = await this.prisma.userPackageAddOn.create({
+    //   data: {
+    //     userId,
+    //     addOnId,
+    //     quantity,
+    //     notes,
+    //     isActive: true,
+    //   },
+    //   include: {
+    //     addOn: true,
+    //     user: {
+    //       select: {
+    //         id: true,
+    //         fullName: true,
+    //         email: true,
+    //       },
+    //     },
+    //   },
+    // });
 
     this.logger.log(
       `Add-on purchase created: User ${userId} purchased ${quantity}x ${addOn.name}`,
     );
 
-    return userAddOn;
+    return user;
   }
 
   async getUserAddOns(userId: number) {
-    return this.prisma.userAddOn.findMany({
+    return this.prisma.userPackage.findMany({
       where: {
         userId,
         isActive: true,
       },
       include: {
-        addOn: true,
+        userPackageAddOn: true,
       },
       orderBy: {
         purchasedAt: 'desc',
@@ -110,7 +110,7 @@ export class AddOnService {
       where: { isActive: true },
     });
 
-    const totalPurchases = await this.prisma.userAddOn.count({
+    const totalPurchases = await this.prisma.userPackageAddOn.count({
       where: { isActive: true },
     });
 
