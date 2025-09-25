@@ -63,6 +63,52 @@ export class PaymentBackgroundService {
                 },
               });
 
+              // Create user subscription relationship
+
+              //Get the subscription from the subscription
+              const defaultSubscription = 'ELITEVIP';
+              const subscription = await this.prisma.subscription.findUnique({
+                where: {
+                  tier: defaultSubscription,
+                },
+              });
+
+              if (!subscription) {
+                this.logger.error(
+                  `Subscription ${defaultSubscription} not found`,
+                );
+                continue;
+              }
+
+              await this.prisma.userSubscription.create({
+                data: {
+                  user: {
+                    connect: {
+                      id: Number(transaction.userId),
+                    },
+                  },
+
+                  subscription: {
+                    connect: {
+                      id: Number(subscription.id),
+                    },
+                  },
+                  currentPeriodStart: new Date(),
+                  currentPeriodEnd: new Date(
+                    new Date().getTime() + 30 * 24 * 60 * 60 * 1000,
+                  ),
+
+                  price: transaction.amount,
+                  status: 'ACTIVE',
+                  stripeCustomerId: 'stripe' as string,
+                },
+              });
+              await this.prisma.user.update({
+                where: { id: transaction.userId },
+                data: {
+                  isMembershipSubscribed: true,
+                },
+              });
               this.logger.log(
                 `Transaction ${transaction.id} marked as PAID for user ${transaction.userId}`,
               );
@@ -105,7 +151,7 @@ export class PaymentBackgroundService {
                 },
               });
 
-              this.prisma.user.update({
+              await this.prisma.user.update({
                 where: { id: transaction.userId },
                 data: {
                   isMembershipSubscribed: true,

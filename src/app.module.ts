@@ -13,6 +13,7 @@ import { SubscriptionModule } from './subscription/subscription.module';
 import { AuthModule } from './auth/auth.module';
 import { PodcastModule } from './podcast/podcast.module';
 import { AdminModule } from './admin/admin.module';
+import { LikesModule } from './likes/likes.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { AdminModule } from './admin/admin.module';
     AuthModule,
     PodcastModule,
     AdminModule,
+    LikesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

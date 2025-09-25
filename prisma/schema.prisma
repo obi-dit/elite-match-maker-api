@@ -44,6 +44,7 @@ model User {
   photo1                      String?   // store file path or URL
   photo2                      String?
   photo3                      String?
+  isApplicantApproved         Boolean @default(false)
   introVideo                  String?   // store file path or URL
   socialMediaLinks            String?  // comma-separated or JSON string
   isMembershipSubscribed      Boolean  @default(false)
@@ -60,6 +61,9 @@ model User {
   transactions                Transaction[]
   userSubscription            UserSubscription[]
   podcastAccess               PodcastAccess[]
+
+  likesAsClient              Likes[] @relation("ClientLikes")
+  likesAsApplicant           Likes[] @relation("ApplicantLikes")
 }
 
 model Package {
@@ -187,6 +191,18 @@ model Subscription {
   userSubscription     UserSubscription[]
 }
 
+
+model Likes {
+  id           Int    @id @default(autoincrement())
+  clientId     Int
+  applicantId  Int
+  client       User    @relation("ClientLikes", fields: [clientId], references: [id])
+  applicant    User    @relation("ApplicantLikes", fields: [applicantId], references: [id])
+
+  @@unique([clientId, applicantId])
+  @@index([clientId])
+  @@index([applicantId])
+}
 
 model UserSubscription {
   id                  Int       @id @default(autoincrement())

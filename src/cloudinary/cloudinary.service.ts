@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { v2 as cloudinary } from 'cloudinary';
+import { FileDirectory } from 'src/enums/general';
 
 @Injectable()
 export class CloudinaryService {
@@ -33,18 +34,26 @@ export class CloudinaryService {
     }
   }
 
-  async uploadVideo(file: Express.Multer.File): Promise<string> {
+  async uploadVideo(
+    file: Express.Multer.File,
+    folder: FileDirectory = FileDirectory.MAIN,
+  ): Promise<string> {
     try {
       // Convert buffer to base64
       const base64Video = file.buffer.toString('base64');
       const dataURI = `data:${file.mimetype};base64,${base64Video}`;
 
       const result = await cloudinary.uploader.upload(dataURI, {
-        folder: 'elite-match-maker/videos',
+        folder: folder,
         resource_type: 'video',
         transformation: [
           { width: 1280, height: 720, crop: 'limit' },
           { quality: 'auto' },
+        ],
+        chunk_size: 6000000, // 6MB chunks for large videos
+        eager: [
+          { width: 1280, height: 720, crop: 'limit' },
+          { width: 640, height: 360, crop: 'limit' },
         ],
       });
 
@@ -52,6 +61,29 @@ export class CloudinaryService {
     } catch (error) {
       console.error('Cloudinary video upload error:', error);
       throw new Error('Failed to upload video to Cloudinary');
+    }
+  }
+
+  async uploadAudio(
+    file: Express.Multer.File,
+    folder: FileDirectory = FileDirectory.AUDIO,
+  ): Promise<string> {
+    try {
+      // Convert buffer to base64
+      const base64Audio = file.buffer.toString('base64');
+      const dataURI = `data:${file.mimetype};base64,${base64Audio}`;
+
+      const result = await cloudinary.uploader.upload(dataURI, {
+        folder: folder,
+        resource_type: 'video', // Audio files are treated as video in Cloudinary
+        transformation: [{ quality: 'auto' }],
+        chunk_size: 6000000, // 6MB chunks for large audio files
+      });
+
+      return result.secure_url;
+    } catch (error) {
+      console.error('Cloudinary audio upload error:', error);
+      throw new Error('Failed to upload audio to Cloudinary');
     }
   }
 

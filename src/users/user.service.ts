@@ -10,7 +10,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { CreateMaleUserDto } from './dto/create-male-user.dto';
 import { CreateMembershipUserDto } from './dto/create-membership-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
-import { City } from '@prisma/client';
+import { City, User } from '@prisma/client';
 import * as argon2 from 'argon2';
 
 @Injectable()
@@ -155,6 +155,7 @@ export class UserService {
         understandsPrivateShow: createMaleUserDto.understandsPrivateShow,
         understandsNoCompensation: createMaleUserDto.understandsNoCompensation,
         confirmsTruthful: createMaleUserDto.confirmsTruthful,
+        password: createMaleUserDto.password ?? null,
       };
 
       // Convert string city values to enum values
@@ -179,6 +180,13 @@ export class UserService {
         };
         userData.cityOfResidence =
           cityMap[userData.cityOfResidence] || City.OTHER;
+      }
+
+      // set default password
+      if (!createMaleUserDto.password) {
+        const defaultPassword = process.env.DEFAULT_PASSWORD;
+        const hashedPassword = await argon2.hash(defaultPassword);
+        userData.password = hashedPassword;
       }
 
       const user = await this.prisma.user.create({
@@ -218,6 +226,7 @@ export class UserService {
           );
         } catch (error) {
           console.error('Error creating payment session:', error);
+          throw error;
           // Don't fail user creation if payment session creation fails
         }
       }
@@ -284,15 +293,15 @@ export class UserService {
     return users as UserResponseDto[];
   }
 
-  async findUserById(id: number): Promise<UserResponseDto> {
-    const user = await this.prisma.user.findUnique({
-      where: { id },
-    });
-    if (!user) {
-      throw new BadRequestException('User not found');
-    }
-    return user as UserResponseDto;
-  }
+  // async findUserById(id: number): Promise<UserResponseDto> {
+  //   const user = await this.prisma.user.findUnique({
+  //     where: { id },
+  //   });
+  //   if (!user) {
+  //     throw new BadRequestException('User not found');
+  //   }
+  //   return user as UserResponseDto;
+  // }
 
   async createMembershipUser(
     createMembershipUserDto: CreateMembershipUserDto,
@@ -345,6 +354,87 @@ export class UserService {
       }
       console.error('Error creating membership user:', error);
       throw new BadRequestException('Failed to create membership user');
+    }
+  }
+
+  async findApplicants(): Promise<Array<Partial<User>>> {
+    try {
+      const applicants = await this.prisma.user.findMany({
+        where: {
+          isMembershipSubscribed: false, // Only non-membership users (applicants)
+          gender: 'FEMALE',
+        },
+        select: {
+          id: true,
+          fullName: true,
+          firstName: true,
+          lastName: true,
+          age: true,
+          photo1: true,
+          photo2: true,
+          photo3: true,
+          cityOfResidence: true,
+          englishProficiency: true,
+          heightCm: true,
+          weightKg: true,
+          personalityThreeWords: true,
+          relationshipGoals: true,
+          talentsOrHobbies: true,
+          whyGoodWife: true,
+          attractionToOlderMen: true,
+          comfortableFilming: true,
+          traditionalWantsMarriage: true,
+          willingToCompete: true,
+          children: true,
+          willingLieDetector: true,
+          consentForMedia: true,
+          comfortableBikiniChallenges: true,
+          introVideo: true,
+          socialMediaLinks: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+
+      return applicants.map(
+        (applicant) =>
+          ({
+            id: applicant.id,
+            fullName: applicant.fullName,
+            firstName: applicant.firstName,
+            lastName: applicant.lastName,
+            age: applicant.age,
+            photo1: applicant.photo1,
+            photo2: applicant.photo2,
+            photo3: applicant.photo3,
+            cityOfResidence: applicant.cityOfResidence,
+            englishProficiency: applicant.englishProficiency,
+            heightCm: applicant.heightCm,
+            weightKg: applicant.weightKg,
+            personalityThreeWords: applicant.personalityThreeWords,
+            relationshipGoals: applicant.relationshipGoals,
+            talentsOrHobbies: applicant.talentsOrHobbies,
+            whyGoodWife: applicant.whyGoodWife,
+            attractionToOlderMen: applicant.attractionToOlderMen,
+            comfortableFilming: applicant.comfortableFilming,
+            traditionalWantsMarriage: applicant.traditionalWantsMarriage,
+            willingToCompete: applicant.willingToCompete,
+            children: applicant.children,
+            willingLieDetector: applicant.willingLieDetector,
+            consentForMedia: applicant.consentForMedia,
+            comfortableBikiniChallenges: applicant.comfortableBikiniChallenges,
+            introVideo: applicant.introVideo,
+            socialMediaLinks: applicant.socialMediaLinks,
+            createdAt: applicant.createdAt,
+            updatedAt: applicant.updatedAt,
+          }) as Partial<User>,
+      );
+    } catch (error) {
+      console.error('Error fetching applicants:', error);
+      throw new BadRequestException('Failed to fetch applicants');
     }
   }
 }

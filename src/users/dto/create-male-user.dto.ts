@@ -170,4 +170,8 @@ export class CreateMaleUserDto {
   @IsOptional()
   @IsString()
   selectedPackage?: string;
+
+  @IsOptional()
+  @IsString()
+  password?: string;
 }

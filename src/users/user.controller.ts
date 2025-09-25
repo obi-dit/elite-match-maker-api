@@ -13,6 +13,7 @@ import { UserService } from './user.service';
 import { CreateUserDto, UserResponseDto } from './dto';
 import { CreateMaleUserDto } from './dto/create-male-user.dto';
 import { CreateMembershipUserDto } from './dto/create-membership-user.dto';
+import { User } from '@prisma/client';
 
 @Controller('users')
 export class UserController {
@@ -65,10 +66,15 @@ export class UserController {
     return this.userService.findAllUsers();
   }
 
-  @Get(':id')
-  async findUserById(
-    @Param('id', ParseIntPipe) id: number,
-  ): Promise<UserResponseDto> {
-    return this.userService.findUserById(id);
+  // @Get(':id')
+  // async findUserById(
+  //   @Param('id', ParseIntPipe) id: number,
+  // ): Promise<UserResponseDto> {
+  //   return this.userService.findUserById(id);
+  // }
+
+  @Get('applicants')
+  async findApplicants(): Promise<Array<Partial<User>>> {
+    return this.userService.findApplicants();
   }
 }

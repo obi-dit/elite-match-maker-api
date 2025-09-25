@@ -2,6 +2,7 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { StripeService } from '../stripe/stripe.service';
 import Stripe from 'stripe';
+import { TransactionStatus } from '@prisma/client';
 
 @Injectable()
 export class PaymentService {
@@ -87,6 +88,15 @@ export class PaymentService {
         },
       });
 
+      // Validate that all requested add-ons were found
+      if (addOns.length > 0 && addOnsData.length !== addOns.length) {
+        const foundIds = addOnsData.map((addOn) => addOn.id);
+        const missingIds = addOns.filter((id) => !foundIds.includes(id));
+        throw new BadRequestException(
+          `Add-ons not found: ${missingIds.join(', ')}`,
+        );
+      }
+
       // Calculate total price including add-ons
       const totalPrice =
         Number(packageData.price) +
@@ -97,23 +107,34 @@ export class PaymentService {
       }
 
       // Create transaction record
+      const transactionData: any = {
+        userId,
+        packageId: packageData.id,
+        amount: totalPrice,
+        status: 'PENDING',
+      };
+
+      // Only add transactionAddOns if there are add-ons
+      if (addOnsData.length > 0) {
+        transactionData.transactionAddOns = {
+          create: addOnsData.map((addOn) => ({
+            addOn: {
+              connect: {
+                id: addOn.id,
+              },
+            },
+            quantity: 1,
+            totalPrice: addOn.price ?? 0,
+            unitPrice: addOn.price ?? 0,
+          })),
+        };
+        console.log('trabsactionData with add-ons', transactionData);
+      } else {
+        console.log('Creating transaction without add-ons');
+      }
+
       const transaction = await this.prisma.transaction.create({
-        data: {
-          userId,
-          packageId: packageData.id,
-          amount: totalPrice,
-          status: 'PENDING',
-          transactionAddOns: {
-            create: [
-              ...addOnsData.map((addOn) => ({
-                addOnId: addOn.id,
-                quantity: 1,
-                totalPrice: addOn.price,
-                unitPrice: addOn.price,
-              })),
-            ],
-          },
-        },
+        data: transactionData,
       });
 
       // Create Stripe checkout session
@@ -248,15 +269,181 @@ export class PaymentService {
   }
 
   async getTransactionBySessionId(sessionId: string) {
-    return this.prisma.transaction.findFirst({
+    let userSubscription = null;
+    let userPackage = null;
+    const session = await this.stripeService.retrieveSession(sessionId);
+    console.log(session);
+    const transaction = await this.prisma.transaction.findFirst({
       where: {
         stripeCheckoutSessionId: sessionId,
       },
       include: {
         user: true,
         package: true,
+        subscription: true,
       },
     });
+    if (
+      session.payment_status === 'paid' &&
+      transaction.status === TransactionStatus.PENDING
+    ) {
+      if (transaction.packageId) {
+        await this.prisma.transaction.update({
+          where: { id: transaction.id },
+          data: {
+            status: 'PAID',
+            stripePaymentIntentId: session.payment_intent as string,
+            paymentMethod: session.payment_method_types?.[0] || 'card',
+            metadata: {
+              customerEmail: session.customer_details?.email,
+              customerName: session.customer_details?.name,
+            },
+          },
+        });
+
+        // Create user package relationship
+        await this.prisma.userPackage.create({
+          data: {
+            userId: transaction.userId,
+            packageId: transaction.packageId,
+            isActive: true,
+          },
+        });
+
+        // Create user subscription relationship
+
+        //Get the subscription from the subscription
+        const defaultSubscription = 'ELITEVIP';
+        const subscription = await this.prisma.subscription.findUnique({
+          where: {
+            tier: defaultSubscription,
+          },
+        });
+
+        if (!subscription) {
+          this.logger.error(`Subscription ${defaultSubscription} not found`);
+          throw new BadRequestException(
+            `Subscription ${defaultSubscription} not found`,
+          );
+        }
+
+        await this.prisma.userSubscription.create({
+          data: {
+            user: {
+              connect: {
+                id: Number(transaction.userId),
+              },
+            },
+
+            subscription: {
+              connect: {
+                id: Number(subscription.id),
+              },
+            },
+            currentPeriodStart: new Date(),
+            currentPeriodEnd: new Date(
+              new Date().getTime() + 30 * 24 * 60 * 60 * 1000,
+            ),
+
+            price: transaction.amount,
+            status: 'ACTIVE',
+            stripeCustomerId: 'stripe' as string,
+          },
+        });
+        await this.prisma.user.update({
+          where: { id: transaction.userId },
+          data: {
+            isMembershipSubscribed: true,
+          },
+        });
+        this.logger.log(
+          `Transaction ${transaction.id} marked as PAID for user ${transaction.userId}`,
+        );
+      }
+
+      if (transaction.subscriptionId) {
+        await this.prisma.transaction.update({
+          where: { id: transaction.id },
+          data: {
+            status: 'PAID',
+            stripePaymentIntentId: session.payment_intent as string,
+            paymentMethod: session.payment_method_types?.[0] || 'card',
+            metadata: {
+              customerEmail: session.customer_details?.email,
+              customerName: session.customer_details?.name,
+            },
+          },
+        });
+        await this.prisma.userSubscription.create({
+          data: {
+            user: {
+              connect: {
+                id: Number(transaction.userId),
+              },
+            },
+
+            subscription: {
+              connect: {
+                id: Number(transaction.subscriptionId),
+              },
+            },
+            currentPeriodStart: new Date(),
+            currentPeriodEnd: new Date(
+              new Date().getTime() + 30 * 24 * 60 * 60 * 1000,
+            ),
+
+            price: transaction.amount,
+            status: 'ACTIVE',
+            stripeCustomerId: 'stripe' as string,
+          },
+        });
+
+        await this.prisma.user.update({
+          where: { id: transaction.userId },
+          data: {
+            isMembershipSubscribed: true,
+          },
+        });
+
+        this.logger.log(
+          `Transaction ${transaction.id} marked as PAID for user ${transaction.userId} and user is now subscribed`,
+        );
+      }
+    }
+    if (transaction.subscriptionId) {
+      userSubscription = await this.prisma.userSubscription.findFirst({
+        where: {
+          userId: transaction.userId,
+          subscriptionId: transaction.subscriptionId,
+        },
+      });
+    }
+    if (transaction.packageId) {
+      userPackage = await this.prisma.userPackage.findFirst({
+        where: {
+          userId: transaction.userId,
+          packageId: transaction.packageId,
+        },
+        include: {
+          package: true,
+        },
+      });
+    }
+    return {
+      ...transaction,
+      userSubscription: userSubscription
+        ? {
+            ...userSubscription,
+          }
+        : null,
+      userPackage: userPackage
+        ? {
+            ...userPackage,
+            name: userPackage.package.name,
+          }
+        : null,
+      paymentStatus: session.payment_status,
+    };
   }
 
   async getUserPackages(userId: number) {

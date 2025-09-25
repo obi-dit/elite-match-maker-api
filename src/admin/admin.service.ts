@@ -6,10 +6,15 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePodcastDto } from '../podcast/dto/podcast.dto';
 import { UpdatePodcastDto } from '../podcast/dto/podcast.dto';
+import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
+import { FileDirectory } from 'src/enums/general';
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cloudinaryService: CloudinaryService,
+  ) {}
 
   // Podcast Management
   async createPodcast(createPodcastDto: CreatePodcastDto) {
@@ -41,53 +46,93 @@ export class AdminService {
     });
   }
 
-  async uploadPodcast(createPodcastDto: any, files: Express.Multer.File[]) {
+  async uploadPodcast(
+    createPodcastDto: any,
+    files: {
+      audioFile?: Express.Multer.File;
+      videoFile?: Express.Multer.File;
+      thumbnailFile?: Express.Multer.File;
+    },
+  ) {
     const { categories, ...podcastData } = createPodcastDto;
 
-    // Handle file uploads
+    // Handle file uploads with proper error handling
     let audioUrl, videoUrl, thumbnailUrl;
 
-    if (files && files.length > 0) {
-      files.forEach((file) => {
-        const fileUrl = `/uploads/${file.filename}`;
+    try {
+      // Upload audio file if provided
+      if (files?.audioFile && files.audioFile.size > 0) {
+        console.log('Uploading audio file:', files.audioFile.originalname);
+        audioUrl = await this.cloudinaryService.uploadAudio(
+          files.audioFile,
+          FileDirectory.AUDIO,
+        );
+        console.log('Audio uploaded successfully:', audioUrl);
+      }
 
-        if (file.mimetype.startsWith('audio/')) {
-          audioUrl = fileUrl;
-        } else if (file.mimetype.startsWith('video/')) {
-          videoUrl = fileUrl;
-        } else if (file.mimetype.startsWith('image/')) {
-          thumbnailUrl = fileUrl;
-        }
-      });
+      // Upload video file if provided
+      if (files?.videoFile && files.videoFile.size > 0) {
+        console.log('Uploading video file:', files.videoFile.originalname);
+        videoUrl = await this.cloudinaryService.uploadVideo(
+          files.videoFile,
+          FileDirectory.PODCAST,
+        );
+        console.log('Video uploaded successfully:', videoUrl);
+      }
+
+      // Upload thumbnail file if provided
+      if (files?.thumbnailFile && files.thumbnailFile.size > 0) {
+        console.log(
+          'Uploading thumbnail file:',
+          files.thumbnailFile.originalname,
+        );
+        thumbnailUrl = await this.cloudinaryService.uploadImage(
+          files.thumbnailFile,
+        );
+        console.log('Thumbnail uploaded successfully:', thumbnailUrl);
+      }
+    } catch (uploadError) {
+      console.error('File upload error:', uploadError);
+      throw new BadRequestException(
+        `File upload failed: ${uploadError.message}`,
+      );
     }
 
-    return await this.prisma.podcast.create({
-      data: {
-        ...podcastData,
-        audioUrl,
-        videoUrl,
-        thumbnailUrl,
-        podcastCategories: {
-          create: categories?.map((category) => ({ category })) || [],
+    // Create podcast record
+    try {
+      return await this.prisma.podcast.create({
+        data: {
+          ...podcastData,
+          audioUrl,
+          videoUrl,
+          thumbnailUrl,
+          podcastCategories: {
+            create: categories?.map((category) => ({ category })) || [],
+          },
         },
-      },
-      include: {
-        podcastCategories: true,
-        podcastAccess: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                fullName: true,
-                firstName: true,
-                lastName: true,
-                email: true,
+        include: {
+          podcastCategories: true,
+          podcastAccess: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                },
               },
             },
           },
         },
-      },
-    });
+      });
+    } catch (dbError) {
+      console.error('Database error:', dbError);
+      throw new BadRequestException(
+        `Failed to create podcast: ${dbError.message}`,
+      );
+    }
   }
 
   async updatePodcast(id: number, updatePodcastDto: UpdatePodcastDto) {
@@ -377,7 +422,41 @@ export class AdminService {
 
     return await this.prisma.user.update({
       where: { id },
-      data: { isMembershipSubscribed: isApproved },
+      data: { isApplicantApproved: isApproved },
+    });
+  }
+
+  // Likes Management
+  async getAllLikes() {
+    return await this.prisma.likes.findMany({
+      include: {
+        client: {
+          select: {
+            id: true,
+            fullName: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            createdAt: true,
+          },
+        },
+        applicant: {
+          select: {
+            id: true,
+            fullName: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            age: true,
+            cityOfResidence: true,
+            photo1: true,
+            photo2: true,
+            photo3: true,
+            createdAt: true,
+          },
+        },
+      },
+      orderBy: { id: 'desc' },
     });
   }
 
@@ -388,6 +467,7 @@ export class AdminService {
       totalClients,
       totalApplicants,
       totalPodcasts,
+      totalLikes,
       recentUsers,
       recentPodcasts,
     ] = await Promise.all([
@@ -397,6 +477,7 @@ export class AdminService {
       }),
       this.prisma.user.count({ where: { gender: 'FEMALE', role: 'USER' } }),
       this.prisma.podcast.count(),
+      this.prisma.likes.count(),
       this.prisma.user.findMany({
         where: { role: 'USER' },
         take: 5,
@@ -425,6 +506,7 @@ export class AdminService {
       totalClients,
       totalApplicants,
       totalPodcasts,
+      totalLikes,
       recentUsers,
       recentPodcasts,
     );
@@ -434,6 +516,7 @@ export class AdminService {
       totalClients,
       totalApplicants,
       totalPodcasts,
+      totalLikes,
       recentUsers,
       recentPodcasts,
     };

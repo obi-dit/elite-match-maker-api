@@ -133,4 +133,8 @@ export class CreateUserDto {
 
   @IsBoolean()
   confirmsTruthful: boolean;
+
+  @IsOptional()
+  @IsString()
+  password?: string;
 }

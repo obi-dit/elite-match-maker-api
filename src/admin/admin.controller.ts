@@ -8,16 +8,16 @@ import {
   Param,
   UseGuards,
   ParseIntPipe,
-  Query,
   UseInterceptors,
   UploadedFiles,
 } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { AdminService } from './admin.service';
 import { AdminGuard } from '../auth/admin.guard';
-import { AdminUser } from '../auth/admin.decorator';
+import { UserDecorator } from '../auth/admin.decorator';
 import { CreatePodcastDto } from '../podcast/dto/podcast.dto';
 import { UpdatePodcastDto } from '../podcast/dto/podcast.dto';
+import { UploadPodcastDto } from './admin.dto';
 
 @Controller('admin')
 @UseGuards(AdminGuard)
@@ -26,7 +26,7 @@ export class AdminController {
 
   // Dashboard
   @Get('dashboard')
-  async getDashboard(@AdminUser() user: any) {
+  async getDashboard(@UserDecorator() user: any) {
     return await this.adminService.getDashboardStats();
   }
 
@@ -34,30 +34,48 @@ export class AdminController {
   @Post('podcasts')
   async createPodcast(
     @Body() createPodcastDto: CreatePodcastDto,
-    @AdminUser() user: any,
+    @UserDecorator() user: any,
   ) {
     return await this.adminService.createPodcast(createPodcastDto);
   }
 
   @Post('podcasts/upload')
-  @UseInterceptors(FilesInterceptor('files', 3))
+  @UseInterceptors(
+    FileFieldsInterceptor([
+      { name: 'audioFile', maxCount: 1 },
+      { name: 'videoFile', maxCount: 1 },
+      { name: 'thumbnailFile', maxCount: 1 },
+    ]),
+  )
   async uploadPodcast(
-    @Body() createPodcastDto: any,
-    @UploadedFiles() files: Express.Multer.File[],
-    @AdminUser() user: any,
+    @Body() createPodcastDto: UploadPodcastDto,
+    @UploadedFiles()
+    files: {
+      audioFile?: Express.Multer.File[];
+      videoFile?: Express.Multer.File[];
+      thumbnailFile?: Express.Multer.File[];
+    },
+    @UserDecorator() user: any,
   ) {
-    return await this.adminService.uploadPodcast(createPodcastDto, files);
+    // Extract single files from arrays
+    const fileData = {
+      audioFile: files?.audioFile?.[0],
+      videoFile: files?.videoFile?.[0],
+      thumbnailFile: files?.thumbnailFile?.[0],
+    };
+
+    return await this.adminService.uploadPodcast(createPodcastDto, fileData);
   }
 
   @Get('podcasts')
-  async getAllPodcasts(@AdminUser() user: any) {
+  async getAllPodcasts(@UserDecorator() user: any) {
     return await this.adminService.getAllPodcasts();
   }
 
   @Get('podcasts/:id')
   async getPodcastById(
     @Param('id', ParseIntPipe) id: number,
-    @AdminUser() user: any,
+    @UserDecorator() user: any,
   ) {
     return await this.adminService.getPodcastById(id);
   }
@@ -66,7 +84,7 @@ export class AdminController {
   async updatePodcast(
     @Param('id', ParseIntPipe) id: number,
     @Body() updatePodcastDto: UpdatePodcastDto,
-    @AdminUser() user: any,
+    @UserDecorator() user: any,
   ) {
     return await this.adminService.updatePodcast(id, updatePodcastDto);
   }
@@ -74,21 +92,21 @@ export class AdminController {
   @Delete('podcasts/:id')
   async deletePodcast(
     @Param('id', ParseIntPipe) id: number,
-    @AdminUser() user: any,
+    @UserDecorator() user: any,
   ) {
     return await this.adminService.deletePodcast(id);
   }
 
   // Client Management
   @Get('clients')
-  async getClients(@AdminUser() user: any) {
+  async getClients(@UserDecorator() user: any) {
     return await this.adminService.getClients();
   }
 
   @Get('clients/:id')
   async getClientById(
     @Param('id', ParseIntPipe) id: number,
-    @AdminUser() user: any,
+    @UserDecorator() user: any,
   ) {
     return await this.adminService.getClientById(id);
   }
@@ -97,21 +115,21 @@ export class AdminController {
   async updateClientStatus(
     @Param('id', ParseIntPipe) id: number,
     @Body('isActive') isActive: boolean,
-    @AdminUser() user: any,
+    @UserDecorator() user: any,
   ) {
     return await this.adminService.updateClientStatus(id, isActive);
   }
 
   // Applicant Management
   @Get('applicants')
-  async getApplicants(@AdminUser() user: any) {
+  async getApplicants(@UserDecorator() user: any) {
     return await this.adminService.getApplicants();
   }
 
   @Get('applicants/:id')
   async getApplicantById(
     @Param('id', ParseIntPipe) id: number,
-    @AdminUser() user: any,
+    @UserDecorator() user: any,
   ) {
     return await this.adminService.getApplicantById(id);
   }
@@ -120,8 +138,14 @@ export class AdminController {
   async updateApplicantStatus(
     @Param('id', ParseIntPipe) id: number,
     @Body('isApproved') isApproved: boolean,
-    @AdminUser() user: any,
+    @UserDecorator() user: any,
   ) {
     return await this.adminService.updateApplicantStatus(id, isApproved);
+  }
+
+  // Likes Management
+  @Get('likes')
+  async getAllLikes(@UserDecorator() user: any) {
+    return await this.adminService.getAllLikes();
   }
 }
