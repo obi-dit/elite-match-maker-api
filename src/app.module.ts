@@ -11,9 +11,9 @@ import { AddOnModule } from './addons/addon.module';
 import { MembershipModule } from './membership/membership.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { AuthModule } from './auth/auth.module';
-import { PodcastModule } from './podcast/podcast.module';
 import { AdminModule } from './admin/admin.module';
 import { LikesModule } from './likes/likes.module';
+import { AtsModule } from './ats/ats.module';
 
 @Module({
   imports: [
@@ -27,9 +27,9 @@ import { LikesModule } from './likes/likes.module';
     MembershipModule,
     SubscriptionModule,
     AuthModule,
-    PodcastModule,
     AdminModule,
     LikesModule,
+    AtsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -12,6 +12,8 @@ import { CreateMembershipUserDto } from './dto/create-membership-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { City, User } from '@prisma/client';
 import * as argon2 from 'argon2';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { CLIENT_CREATED, ClientCreatedEvent } from '../ats/ats-sync.events';
 
 @Injectable()
 export class UserService {
@@ -19,7 +21,21 @@ export class UserService {
     private readonly prisma: PrismaService,
     private readonly paymentService: PaymentService,
     private readonly addOnService: AddOnService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
+
+  private emitClientCreated(user: User) {
+    const event: ClientCreatedEvent = {
+      userId: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      fullName: user.fullName,
+      phone: user.whatsappNumber,
+      gender: user.gender,
+    };
+    this.eventEmitter.emit(CLIENT_CREATED, event);
+  }
 
   async createUser(createUserDto: CreateUserDto): Promise<UserResponseDto> {
     try {
@@ -61,8 +77,22 @@ export class UserService {
       const user = await this.prisma.user.create({
         data: createUserDto,
       });
+      this.emitClientCreated(user);
 
       const userResponse = user as UserResponseDto;
+
+      let paymentSession = null;
+      try {
+        paymentSession =
+          await this.paymentService.createApplicationFeePaymentSession(user.id);
+      } catch (error) {
+        console.error('Error creating application fee payment session:', error);
+        throw error;
+      }
+
+      if (paymentSession) {
+        (userResponse as any).paymentSession = paymentSession;
+      }
 
       return userResponse;
     } catch (error) {
@@ -192,56 +222,22 @@ export class UserService {
       const user = await this.prisma.user.create({
         data: userData,
       });
+      this.emitClientCreated(user);
 
-      // Handle add-on purchases if selected
-      if (
-        createMaleUserDto.selectedAddOns &&
-        createMaleUserDto.selectedAddOns.length > 0
-      ) {
-        try {
-          await Promise.all(
-            createMaleUserDto.selectedAddOns.map((addOnId) =>
-              this.addOnService.purchaseAddOn({
-                userId: user.id,
-                addOnId,
-                quantity: 1,
-                notes: 'Purchased with male user application',
-              }),
-            ),
-          );
-        } catch (addOnError) {
-          console.error('Error creating add-on purchases:', addOnError);
-          // Don't fail user creation if add-on creation fails
-        }
-      }
-
-      // Create payment session for male users (only if package is selected)
       let paymentSession = null;
-      if (createMaleUserDto.selectedPackage) {
-        try {
-          paymentSession = await this.paymentService.createPaymentSession(
-            user.id,
-            createMaleUserDto.selectedPackage,
-            createMaleUserDto.selectedAddOns,
-          );
-        } catch (error) {
-          console.error('Error creating payment session:', error);
-          throw error;
-          // Don't fail user creation if payment session creation fails
-        }
+      try {
+        paymentSession =
+          await this.paymentService.createApplicationFeePaymentSession(user.id);
+      } catch (error) {
+        console.error('Error creating application fee payment session:', error);
+        throw error;
       }
 
       const userResponse = user as UserResponseDto;
 
-      // Add payment session to response if available
       if (paymentSession) {
         (userResponse as any).paymentSession = paymentSession;
       }
-
-      // Add add-on and package information to response
-      (userResponse as any).selectedAddOns =
-        createMaleUserDto.selectedAddOns || [];
-      (userResponse as any).selectedPackage = createMaleUserDto.selectedPackage;
 
       return userResponse;
     } catch (error) {
@@ -335,6 +331,7 @@ export class UserService {
           confirmsTruthful: true,
         },
       });
+      this.emitClientCreated(user);
 
       // Create payment session for membership users
       let paymentSession = null;

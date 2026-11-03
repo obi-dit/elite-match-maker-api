@@ -1,13 +1,61 @@
 import { PrismaClient } from '@prisma/client';
+import * as argon2 from 'argon2';
 import { seedFeatures } from './seed-features';
 
 const prisma = new PrismaClient();
 
+const ADMIN_EMAIL = 'admin@mailinator.com';
+const ADMIN_PASSWORD = 'default-password';
+
+async function seedAdmin() {
+  const password = await argon2.hash(ADMIN_PASSWORD);
+
+  const admin = await prisma.user.upsert({
+    where: { email: ADMIN_EMAIL },
+    update: {
+      password,
+      role: 'ADMIN',
+      firstName: 'Elite',
+      lastName: 'Admin',
+      gender: 'MALE',
+    },
+    create: {
+      email: ADMIN_EMAIL,
+      password,
+      role: 'ADMIN',
+      firstName: 'Elite',
+      lastName: 'Admin',
+      gender: 'MALE',
+    },
+  });
+
+  console.log(`Admin user ready: ${admin.email} (id ${admin.id})`);
+}
+
 async function main() {
   console.log('Seeding database...');
 
+  await seedAdmin();
+
   // Seed features and tier relationships
   await seedFeatures();
+
+  await prisma.package.upsert({
+    where: { name: 'Application Fee' },
+    update: {
+      price: 50.0,
+      isActive: true,
+      description:
+        'Non-refundable application processing fee for Elite International Match Maker.',
+    },
+    create: {
+      name: 'Application Fee',
+      description:
+        'Non-refundable application processing fee for Elite International Match Maker.',
+      price: 50.0,
+      isActive: true,
+    },
+  });
 
   // Create Starter Package
   const starterPackage = await prisma.package.upsert({

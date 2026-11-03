@@ -60,7 +60,6 @@ model User {
   userPackages                UserPackage[]
   transactions                Transaction[]
   userSubscription            UserSubscription[]
-  podcastAccess               PodcastAccess[]
 
   likesAsClient              Likes[] @relation("ClientLikes")
   likesAsApplicant           Likes[] @relation("ApplicantLikes")
@@ -345,74 +344,11 @@ enum SupscriptionPeriod{
   YEARLY
 }
 
-model Podcast {
-  id          Int      @id @default(autoincrement())
-  title       String
-  description String?
-  audioUrl    String?  // URL to audio file
-  videoUrl    String?  // URL to video file (for live streams)
-  thumbnailUrl String? // URL to thumbnail image
-  duration    Int?     // Duration in seconds
-  status      PodcastStatus @default(DRAFT)
-  type        PodcastType @default(RECORDED)
-  scheduledAt DateTime? // For live podcasts
-  streamKey   String?   // For live streaming
-  isLive      Boolean   @default(false)
-  viewCount   Int       @default(0)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  // Relationships
-  podcastAccess PodcastAccess[]
-  podcastCategories PodcastCategory[]
-
-  @@index([status])
-  @@index([type])
-  @@index([isLive])
-  @@index([scheduledAt])
-}
-
-model PodcastCategory {
-  id        Int      @id @default(autoincrement())
-  podcastId Int
-  category  String   // e.g., "Dating Tips", "Success Stories", "Live Q&A"
-  createdAt DateTime @default(now())
-
-  // Relationships
-  podcast   Podcast  @relation(fields: [podcastId], references: [id], onDelete: Cascade)
-
-  @@unique([podcastId, category])
-  @@index([podcastId])
-  @@index([category])
-}
-
-model PodcastAccess {
-  id        Int      @id @default(autoincrement())
-  podcastId Int
-  userId    Int
-  accessedAt DateTime @default(now())
-
-  // Relationships
-  podcast   Podcast  @relation(fields: [podcastId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([podcastId, userId])
-  @@index([podcastId])
-  @@index([userId])
-}
-
-enum PodcastStatus {
-  DRAFT
-  PUBLISHED
-  ARCHIVED
-  LIVE
-  ENDED
-}
-
-enum PodcastType {
-  RECORDED
-  LIVE
-  PREMIUM
+/// Admin-selected DIT Talent ATS season. Connection credentials stay in the environment.
+model AtsSetting {
+  id        Int      @id @default(1)
+  seasonId  String?
+  updatedAt DateTime @updatedAt
 }
 
 enum UserRole {

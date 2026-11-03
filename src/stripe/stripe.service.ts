@@ -19,6 +19,7 @@ export class StripeService {
     amount: number,
     successUrl: string,
     cancelUrl: string,
+    productDescription?: string,
   ): Promise<{ sessionId: string; url: string }> {
     try {
       const session = await this.stripe.checkout.sessions.create({
@@ -30,6 +31,7 @@ export class StripeService {
               product_data: {
                 name: packageName,
                 description:
+                  productDescription ??
                   'Elite International Match Maker - Passport Bachelor Program',
               },
               unit_amount: Math.round(amount * 100), // Convert to cents

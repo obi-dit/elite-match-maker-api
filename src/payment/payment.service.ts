@@ -3,6 +3,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { StripeService } from '../stripe/stripe.service';
 import Stripe from 'stripe';
 import { TransactionStatus } from '@prisma/client';
+import {
+  APPLICATION_FEE_AMOUNT_USD,
+  APPLICATION_FEE_PACKAGE_NAME,
+} from './application-fee.constants';
 
 @Injectable()
 export class PaymentService {
@@ -63,6 +67,69 @@ export class PaymentService {
       };
     } catch (error) {
       this.logger.error('Error creating membership payment session:', error);
+      throw error;
+    }
+  }
+
+  async getOrCreateApplicationFeePackage() {
+    return this.prisma.package.upsert({
+      where: { name: APPLICATION_FEE_PACKAGE_NAME },
+      update: {
+        price: APPLICATION_FEE_AMOUNT_USD,
+        isActive: true,
+        description:
+          'Non-refundable application processing fee for Elite International Match Maker.',
+      },
+      create: {
+        name: APPLICATION_FEE_PACKAGE_NAME,
+        description:
+          'Non-refundable application processing fee for Elite International Match Maker.',
+        price: APPLICATION_FEE_AMOUNT_USD,
+        isActive: true,
+      },
+    });
+  }
+
+  async createApplicationFeePaymentSession(
+    userId: number,
+  ): Promise<{ sessionId: string; url: string; amount: number }> {
+    try {
+      const packageData = await this.getOrCreateApplicationFeePackage();
+      const amount = APPLICATION_FEE_AMOUNT_USD;
+
+      const transaction = await this.prisma.transaction.create({
+        data: {
+          userId,
+          packageId: packageData.id,
+          amount,
+          status: 'PENDING',
+        },
+      });
+
+      const session = await this.stripeService.createCheckoutSession(
+        userId,
+        packageData.id,
+        packageData.name,
+        amount,
+        `${process.env.FRONTEND_URL}/onboarding/stripe-success?session_id={CHECKOUT_SESSION_ID}`,
+        `${process.env.FRONTEND_URL}/payment/cancel`,
+        'One-time application fee to process and review your submission.',
+      );
+
+      await this.prisma.transaction.update({
+        where: { id: transaction.id },
+        data: {
+          stripeCheckoutSessionId: session.sessionId,
+        },
+      });
+
+      return {
+        sessionId: session.sessionId,
+        url: session.url,
+        amount,
+      };
+    } catch (error) {
+      this.logger.error('Error creating application fee payment session:', error);
       throw error;
     }
   }
@@ -283,11 +350,39 @@ export class PaymentService {
         subscription: true,
       },
     });
+    if (!transaction) {
+      throw new BadRequestException('Transaction not found');
+    }
+    const isApplicationFee =
+      transaction.package?.name === APPLICATION_FEE_PACKAGE_NAME;
     if (
       session.payment_status === 'paid' &&
       transaction.status === TransactionStatus.PENDING
     ) {
-      if (transaction.packageId) {
+      if (transaction.packageId && isApplicationFee) {
+        await this.prisma.transaction.update({
+          where: { id: transaction.id },
+          data: {
+            status: 'PAID',
+            stripePaymentIntentId: session.payment_intent as string,
+            paymentMethod: session.payment_method_types?.[0] || 'card',
+            metadata: {
+              customerEmail: session.customer_details?.email,
+              customerName: session.customer_details?.name,
+            },
+          },
+        });
+        await this.prisma.userPackage.create({
+          data: {
+            userId: transaction.userId,
+            packageId: transaction.packageId,
+            isActive: true,
+          },
+        });
+        this.logger.log(
+          `Application fee transaction ${transaction.id} marked as PAID for user ${transaction.userId}`,
+        );
+      } else if (transaction.packageId) {
         await this.prisma.transaction.update({
           where: { id: transaction.id },
           data: {
