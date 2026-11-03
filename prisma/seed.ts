@@ -1,41 +1,16 @@
 import { PrismaClient } from '@prisma/client';
-import * as argon2 from 'argon2';
 import { seedFeatures } from './seed-features';
+import { seedAdmin } from './seed-admin';
 
 const prisma = new PrismaClient();
-
-const ADMIN_EMAIL = 'admin@mailinator.com';
-const ADMIN_PASSWORD = 'default-password';
-
-async function seedAdmin() {
-  const password = await argon2.hash(ADMIN_PASSWORD);
-
-  const admin = await prisma.user.upsert({
-    where: { email: ADMIN_EMAIL },
-    update: {
-      password,
-      role: 'ADMIN',
-      firstName: 'Elite',
-      lastName: 'Admin',
-      gender: 'MALE',
-    },
-    create: {
-      email: ADMIN_EMAIL,
-      password,
-      role: 'ADMIN',
-      firstName: 'Elite',
-      lastName: 'Admin',
-      gender: 'MALE',
-    },
-  });
-
-  console.log(`Admin user ready: ${admin.email} (id ${admin.id})`);
-}
 
 async function main() {
   console.log('Seeding database...');
 
-  await seedAdmin();
+  await seedAdmin(prisma, {
+    email: 'admin@mailinator.com',
+    password: 'default-password',
+  });
 
   // Seed features and tier relationships
   await seedFeatures();
